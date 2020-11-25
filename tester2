@@ -3,7 +3,7 @@ from bokeh.plotting import figure, show, output_file
 import math
 import scratch
 from datetime import date
-from bokeh.models import ColumnDataSource, CustomJS, LogColorMapper, HoverTool, TapTool, WheelZoomTool, ResetTool, PanTool
+from bokeh.models import ColumnDataSource, CustomJS, LogColorMapper, HoverTool, TapTool, WheelZoomTool, ResetTool, PanTool, Div
 from bokeh.models.widgets import DateSlider
 from bokeh.layouts import layout, column
 from bokeh.events import Tap
@@ -42,7 +42,11 @@ print(dates)
 #county_colors = []
 #datas = {}
 
-bigdict=dict(x=county_xs, y=county_ys)
+bigdict=dict(x=county_xs, y=county_ys,imgs=['https://docs.bokeh.org/static/snake.jpg',
+        'https://docs.bokeh.org/static/snake2.png',
+        'https://dods.bokeh.org/static/snake3D.png',
+        'https://docs.bokeh.org/static/snake4_TheRevenge.png',
+        'https://docs.bokeh.org/static/snakebite.jpg'],)
 # for d in dates:
 lst=[]
 
@@ -83,30 +87,74 @@ pal = [colors[min(int(math.log(rate+1, 10)), 5)] for rate in lst]
 
 
 source = ColumnDataSource(data=bigdict)
+TOOLTIPS = """
+<div>
+    <div>
+        <img
+            src="@imgs" height="42" alt="@imgs" width="42"
+            style="float: left; margin: 0px 15px 15px 0px;"
+            border="2"/>
+    </div>
+</div> """
 p = figure(title="US Unemployment 2009", toolbar_location="left",
-    plot_width=1100, plot_height=700, tools="tap,hover,wheel_zoom,reset,pan")
+    plot_width=1100, plot_height=700, name='graph', tools='tap,reset')
 
 renderer = p.patches(county_xs,  county_ys, fill_color=pal, fill_alpha=0.7,
     line_color="white", line_width=0.5)
 
-p.patches(state_xs, state_ys, fill_alpha=0.0,
-    line_color="white", line_width=2, hover_color="#F0EE9E", hover_fill_alpha=0.1)
+glyphs = p.patches(state_xs, state_ys, fill_alpha=0.0,
+    line_color="white", line_width=2, hover_color="#CFE697", hover_fill_alpha=0.2, name='needshover')
 
+p.js_on_event('reset', CustomJS(code="""document.getElementById("tooltip").style.display = \"none\""""))
+#
+# cb=CustomJS(code="""
+#     tooltip("graph here");
+#     console.log("hello!!");
+# """)
+hover = HoverTool(name='ht', names=['needshover'], tooltips=None)
+#taptool= TapTool(behavior="inspect", names=['needshover'])
+div = Div(text='<div id="tooltip"></div>')
+p.select(TapTool).names = ['needshover']
 
+p.select(TapTool).callback = CustomJS(args={'tp': TOOLTIPS}, code='''  
+                if (cb_data.source.selected.indices.length > 0){
+                const selected_index = cb_data.source.selected.indices[0];
+                const tooltip = document.getElementById("tooltip");
 
-hover = p.select_one(HoverTool)
+                const tooltip_wrapper = tooltip.parentElement.parentElement;
+                if (tooltip_wrapper.className !== 'bk')
+                    throw new Error('Unable to find the correct tooltip wrapper element');
+                tooltip_wrapper.style.left = Number(cb_data.geometries.sx) + Number(20) + 'px';
+                tooltip_wrapper.style.top = Number(cb_data.geometries.sy) - Number(20) + 'px';
+
+                tooltip.style.display = 'block';
+                tp = tp.replace('@imgs', 'https://docs.bokeh.org/static/snake.jpg');
+                            
+                tooltip.innerHTML = tp;
+           } else {
+           document.getElementById("tooltip").style.display = \"none\";
+           }''')
+
+#p.select(TapTool).behavior = "inspect"
+
+#source.selected.js_on_change('indices', CustomJS(code = 'if (cb_obj.indices.length == 0) document.getElementById("tooltip").style.display = \"none\"'))
+p.add_tools(hover)
+
 p.grid.grid_line_color = None
-p.hover.point_policy = "follow_mouse"
-hover.tooltips = [
-    ("State", "$['State']"),
-    ("County", "@['County Name']"),
-]
 
-taptool = p.select(type=TapTool)
-def click(event):
-    selected = source.selected.indices
-    print(selected)
-p.on_event(Tap, click)
+# p.hover.point_policy = "follow_mouse"
+# hover.tooltips = [
+#     ("State", "$['State']"),
+#     ("County", "@['County Name']"),
+# ]
+
+#taptool = p.select(type=TapTool)
+
+# def click(event):
+#     return
+    #selected = source.selected.indices
+    #print(selected)
+#p.on_event(Tap, click)
 
 
 #E0DEDC
@@ -123,7 +171,6 @@ p.on_event(Tap, click)
 output_file("choropleth.html", title="choropleth.py example")
 #callback.args["selecteddate"] = date_range_slider
 
+l = layout(p,div)
 
-
-l = layout(column(p))
 show(l)
