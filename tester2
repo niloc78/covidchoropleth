@@ -1,12 +1,14 @@
+from bokeh.embed import json_item
 from bokeh.sampledata import us_states, us_counties, unemployment
 from bokeh.plotting import figure, show, output_file
 import math
 import scratch
 from datetime import date
-from bokeh.models import ColumnDataSource, CustomJS, LogColorMapper, HoverTool, TapTool, WheelZoomTool, ResetTool, PanTool, Div
+from bokeh.models import ColumnDataSource, CustomJS, LogColorMapper, HoverTool, TapTool, WheelZoomTool, ResetTool, PanTool, Div, Span
 from bokeh.models.widgets import DateSlider
 from bokeh.layouts import layout, column
 from bokeh.events import Tap
+import json
 
 us_states = us_states.data.copy()
 us_counties = us_counties.data.copy()
@@ -87,15 +89,69 @@ pal = [colors[min(int(math.log(rate+1, 10)), 5)] for rate in lst]
 
 
 source = ColumnDataSource(data=bigdict)
+# <img
+#             src="@imgs" height="42" alt="@imgs" width="42"
+#             style="float: left; margin: 0px 15px 15px 0px;"
+#             border="2"/>
 TOOLTIPS = """
-<div>
-    <div>
-        <img
-            src="@imgs" height="42" alt="@imgs" width="42"
-            style="float: left; margin: 0px 15px 15px 0px;"
-            border="2"/>
-    </div>
-</div> """
+    <style>
+    .tooltip:before {
+  content: ""; /* here's the magic */
+  position:absolute;
+  
+  /* vertically center */
+  top:50%;
+  transform:translateY(-10%);
+  
+  /* move to right */
+  left:100%;
+  margin-left:0px; /* and add a small left margin */
+  
+  /* basic styles */
+  width:281px;
+  height: 210px;
+  padding:10px;
+  border-radius:10px;
+  background:#fff;
+  color: #fff;
+  text-align:center;
+  animation:fadeIn 0.7s ease-in;
+  display:block; /* hide by default */
+}
+    .tooltip:after{
+  content: "";
+  position: absolute;
+  
+  /* position tooltip correctly */
+  left:100%;
+  margin-left:-15px;
+ 
+  /* vertically center */
+  top:50%;
+  transform:translateY(-50%);
+ 
+  /* the arrow */
+  border:7.5px solid #000;
+  border-color: transparent gray transparent transparent;
+  animation:fadeIn 0.7s ease-in;
+  opacity:0.7;
+  display:block;
+}
+@keyframes fadeIn {
+    from { 
+      opacity:0;
+    }
+    to {
+      opacity:1;
+    }
+}
+
+
+</style>
+    
+    <span data-text="Hellloeloeloeleol" class="tooltip"><div id="myplot" style="animation: fadeIn 1.4s ease-in;"></div></span>
+   
+ """
 p = figure(title="US Unemployment 2009", toolbar_location="left",
     plot_width=1100, plot_height=700, name='graph', tools='tap,reset')
 
@@ -113,10 +169,18 @@ p.js_on_event('reset', CustomJS(code="""document.getElementById("tooltip").style
 # """)
 hover = HoverTool(name='ht', names=['needshover'], tooltips=None)
 #taptool= TapTool(behavior="inspect", names=['needshover'])
-div = Div(text='<div id="tooltip"></div>')
+div = Div(text='<div id="tooltip" style="width: max-content;"></div>')
+div2 = Div(text='<div id="myplot" style="width: max-content;"></div>')
 p.select(TapTool).names = ['needshover']
 
-p.select(TapTool).callback = CustomJS(args={'tp': TOOLTIPS}, code='''  
+
+p.add_tools(hover)
+
+p2 = figure(plot_width=300, plot_height=200)
+p2.circle([1,2],[3,4])
+item_text = json.dumps(json_item(p2))
+p.grid.grid_line_color = None
+p.select(TapTool).callback = CustomJS(args=dict(tp=TOOLTIPS, item_text=item_text), code='''  
                 if (cb_data.source.selected.indices.length > 0){
                 const selected_index = cb_data.source.selected.indices[0];
                 const tooltip = document.getElementById("tooltip");
@@ -125,49 +189,20 @@ p.select(TapTool).callback = CustomJS(args={'tp': TOOLTIPS}, code='''
                 if (tooltip_wrapper.className !== 'bk')
                     throw new Error('Unable to find the correct tooltip wrapper element');
                 tooltip_wrapper.style.left = Number(cb_data.geometries.sx) + Number(20) + 'px';
-                tooltip_wrapper.style.top = Number(cb_data.geometries.sy) - Number(20) + 'px';
+                tooltip_wrapper.style.top = Number(cb_data.geometries.sy) - Number(10) + 'px';
 
                 tooltip.style.display = 'block';
-                tp = tp.replace('@imgs', 'https://docs.bokeh.org/static/snake.jpg');
-                            
+
+
                 tooltip.innerHTML = tp;
+
+                var item = JSON.parse(item_text);
+                var x = Bokeh.embed.embed_item(item, "myplot");
+                console.log(x)
            } else {
            document.getElementById("tooltip").style.display = \"none\";
            }''')
 
-#p.select(TapTool).behavior = "inspect"
-
-#source.selected.js_on_change('indices', CustomJS(code = 'if (cb_obj.indices.length == 0) document.getElementById("tooltip").style.display = \"none\"'))
-p.add_tools(hover)
-
-p.grid.grid_line_color = None
-
-# p.hover.point_policy = "follow_mouse"
-# hover.tooltips = [
-#     ("State", "$['State']"),
-#     ("County", "@['County Name']"),
-# ]
-
-#taptool = p.select(type=TapTool)
-
-# def click(event):
-#     return
-    #selected = source.selected.indices
-    #print(selected)
-#p.on_event(Tap, click)
-
-
-#E0DEDC
-# date_range_slider = DateSlider(aspect_ratio=30, title="Date: ", start=date(2020, 1, 22), end=date.today(), value=(date(2020, 1, 22)), step=1)
-# callback = CustomJS(args=dict(source=source, renderer=renderer),
-#                     code="""
-#                         var selected_date = new Date(cb_obj.value);
-#                         renderer.glyph.fill_color.field = (selected_date.getMonth() + 1) + "/" + selected_date.getDate() + "/" + selected_date.getFullYear().toString().substr(-2);
-#                         source.change.emit();
-#                       """)
-#date_range_slider.js_on_change('value', callback)
-#callback.args["selecteddate"] = date_range_slider.value_as_date.strftime('%-m/%-d/%y')
-# print(date_range_slider.value_as_date.strftime('%-m/%-d/%y'))
 output_file("choropleth.html", title="choropleth.py example")
 #callback.args["selecteddate"] = date_range_slider
 
